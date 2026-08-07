@@ -1,0 +1,39 @@
+{
+  "name": "speech-to-text-app",
+  "version": "1.0.0",
+  "description": "Desktop application that monitors folders for .wav files and converts them to text using Whisper",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build": "electron-builder",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "author": "Your Name",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^27.0.0",
+    "electron-builder": "^24.6.4"
+  },
+  "dependencies": {
+    "chokidar": "^3.5.3",
+    "node-wav": "^0.0.2",
+    "shell-path": "^3.0.0"
+  },
+  "build": {
+    "appId": "com.yourcompany.speech-to-text",
+    "productName": "Speech to Text",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.ico"
+    }
+  }
+}
