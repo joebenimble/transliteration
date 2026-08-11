@@ -47,7 +47,8 @@ APP_PASSWORD=devpassword SESSION_SECRET=devsecret npm start
 | `SESSION_SECRET` | Yes (production) | Session signing secret |
 | `PORT` | No | HTTP port (default `3000`) |
 | `DATA_DIR` | No | Data storage path (default `./data`) |
-| `NODE_ENV` | No | Set to `production` for secure cookies |
+| `NODE_ENV` | No | Set to `production` for production deploys |
+| `COOKIE_SECURE` | No | Set to `true` when serving over HTTPS (Railway/Render). Leave unset for `http://localhost` |
 
 ## Docker
 

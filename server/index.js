@@ -14,6 +14,7 @@ const PORT = process.env.PORT || 3000;
 const APP_PASSWORD = process.env.APP_PASSWORD || 'devpassword';
 const SESSION_SECRET = process.env.SESSION_SECRET || 'change-me-in-production';
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
+const COOKIE_SECURE = process.env.COOKIE_SECURE === 'true';
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
@@ -44,6 +45,10 @@ const upload = multer({
 
 const app = express();
 
+if (COOKIE_SECURE) {
+  app.set('trust proxy', 1);
+}
+
 app.use(cookieParser());
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
@@ -53,7 +58,8 @@ app.use(session({
   saveUninitialized: false,
   cookie: {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: COOKIE_SECURE,
+    sameSite: 'lax',
     maxAge: 7 * 24 * 60 * 60 * 1000
   }
 }));
@@ -157,4 +163,6 @@ app.get('/api/transcriptions', (_req, res) => {
 app.listen(PORT, () => {
   console.log(`Speech-to-text web app listening on port ${PORT}`);
   console.log(`Data directory: ${DATA_DIR}`);
+  console.log(`Login password: ${process.env.APP_PASSWORD ? 'from APP_PASSWORD env' : 'default (devpassword)'}`);
+  console.log(`Secure cookies: ${COOKIE_SECURE ? 'enabled (COOKIE_SECURE=true)' : 'disabled'}`);
 });

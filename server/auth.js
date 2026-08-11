@@ -20,7 +20,13 @@ function createAuthMiddleware(appPassword) {
 
     if (password === appPassword) {
       req.session.authenticated = true;
-      return res.redirect('/');
+      return req.session.save((err) => {
+        if (err) {
+          console.error('Failed to save session:', err);
+          return res.status(500).send('Session error');
+        }
+        return res.redirect('/');
+      });
     }
 
     return res.redirect('/login.html?error=1');
