@@ -167,7 +167,34 @@
       color: #6c757d;
     }
 
-    .footer {
+    .danger {
+      background: #dc3545;
+    }
+
+    .danger:hover {
+      background: #c82333;
+    }
+
+    .memo-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .text-column {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .text-column-header {
+      display: flex;
+      justify-content: flex-end;
+    }
+
+    .delete-button {
+      width: fit-content;
+    }
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -190,6 +217,7 @@
     <h1>Speech to Text</h1>
     <div class="header-actions">
       <a class="link-button secondary" href="/api/transcriptions">Download transcriptions.txt</a>
+      <button id="reset-file-button" type="button" class="secondary">Reset File</button>
       <form method="POST" action="/logout" style="margin:0;">
         <button type="submit" class="secondary">Log out</button>
       </form>
@@ -208,7 +236,7 @@
 
   <div class="panel">
     <h2>Memo Log</h2>
-    <p class="subtitle">Review up to 10 memos at a time. Play each WAV, edit the transcription, then submit to save and remove the files.</p>
+    <p class="subtitle">Review up to 10 memos at a time. Play each WAV, edit the transcription, then submit to save and remove the files. Use Delete to discard a memo without saving it.</p>
     <div id="memo-list" class="memo-list"></div>
     <div class="footer">
       <div id="status-text" class="status-line">Loading memos...</div>
@@ -225,6 +253,7 @@
     const memoList = document.getElementById('memo-list');
     const statusText = document.getElementById('status-text');
     const submitButton = document.getElementById('submit-button');
+    const resetFileButton = document.getElementById('reset-file-button');
     const sharedAudio = document.getElementById('shared-audio');
 
     let currentMemos = [];
@@ -325,6 +354,56 @@
       }
     }
 
+    async function deleteMemo(memoId) {
+      if (!confirm('Delete this memo? It will not be saved to transcriptions.txt.')) {
+        return;
+      }
+
+      if (playingMemoId === memoId) {
+        resetAudio();
+      }
+
+      try {
+        const response = await apiFetch(`/api/memos/${memoId}`, { method: 'DELETE' });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Delete failed');
+        }
+
+        const pageData = await response.json();
+        lastMemoSnapshot = '';
+        renderMemos(pageData);
+      } catch (error) {
+        console.error('Failed to delete memo:', error);
+        statusText.textContent = error.message || 'Failed to delete memo';
+      }
+    }
+
+    async function resetTranscriptionsFile() {
+      if (!confirm('Clear transcriptions.txt? Download a copy first if you need to keep the current contents.')) {
+        return;
+      }
+
+      resetFileButton.disabled = true;
+
+      try {
+        const response = await apiFetch('/api/transcriptions', { method: 'DELETE' });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Reset failed');
+        }
+
+        uploadStatus.textContent = 'transcriptions.txt has been cleared.';
+      } catch (error) {
+        console.error('Failed to reset transcriptions file:', error);
+        uploadStatus.textContent = error.message || 'Failed to reset transcriptions.txt';
+      } finally {
+        resetFileButton.disabled = false;
+      }
+    }
+
     function renderMemos(pageData) {
       currentMemos = pageData.memos || [];
       totalRemaining = pageData.totalRemaining || 0;
@@ -366,8 +445,32 @@
 
         audioColumn.appendChild(filename);
         audioColumn.appendChild(playButton);
+
+        const textColumn = document.createElement('div');
+        textColumn.className = 'text-column';
+
+        const textHeader = document.createElement('div');
+        textHeader.className = 'text-column-header';
+
+        const deleteButton = document.createElement('button');
+        deleteButton.className = 'delete-button danger';
+        deleteButton.type = 'button';
+        deleteButton.textContent = 'Delete';
+        deleteButton.addEventListener('click', () => deleteMemo(memo.id));
+
+        const textarea = document.createElement('textarea');
+        textarea.className = 'transcription-input';
+        textarea.value = memo.transcription || '';
+        textarea.dataset.memoId = memo.id;
+        textarea.addEventListener('blur', (event) => {
+          persistMemoText(memo.id, event.target.value);
+        });
+
+        textHeader.appendChild(deleteButton);
+        textColumn.appendChild(textHeader);
+        textColumn.appendChild(textarea);
         row.appendChild(audioColumn);
-        row.appendChild(textarea);
+        row.appendChild(textColumn);
         memoList.appendChild(row);
       });
 
@@ -497,6 +600,7 @@
 
     uploadButton.addEventListener('click', uploadFiles);
     submitButton.addEventListener('click', submitCurrentPage);
+    resetFileButton.addEventListener('click', resetTranscriptionsFile);
 
     refreshStatus();
     statusPollTimer = setInterval(refreshStatus, 3000);

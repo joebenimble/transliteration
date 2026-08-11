@@ -94,6 +94,25 @@ class MemoStore {
     }
   }
 
+  deleteMemo(id) {
+    const index = this.pendingMemos.memos.findIndex((item) => item.id === id);
+    if (index === -1) {
+      return false;
+    }
+
+    const memo = this.pendingMemos.memos[index];
+    this.deleteUploadedFile(memo.wavPath);
+    this.pendingMemos.memos.splice(index, 1);
+    this.savePendingMemos();
+    return true;
+  }
+
+  resetTranscriptionsFile() {
+    if (fs.existsSync(this.transcriptionsPath)) {
+      fs.unlinkSync(this.transcriptionsPath);
+    }
+  }
+
   submitPendingMemos(submissions) {
     const submittedIds = submissions.map((item) => item.id);
     const pageMemos = this.pendingMemos.memos.slice(0, MEMO_PAGE_SIZE);

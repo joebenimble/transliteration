@@ -125,6 +125,16 @@ app.patch('/api/memos/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+app.delete('/api/memos/:id', (req, res) => {
+  const deleted = memoStore.deleteMemo(req.params.id);
+
+  if (!deleted) {
+    return res.status(404).json({ error: 'Memo not found' });
+  }
+
+  res.json(memoStore.getMemoPage());
+});
+
 app.post('/api/memos/submit', (req, res) => {
   const submissions = req.body.submissions;
 
@@ -175,6 +185,11 @@ app.get('/api/audio/:id', (req, res) => {
   res.setHeader('Content-Range', `bytes ${start}-${end}/${fileSize}`);
   res.setHeader('Content-Length', chunkSize);
   fs.createReadStream(filePath, { start, end }).pipe(res);
+});
+
+app.delete('/api/transcriptions', (_req, res) => {
+  memoStore.resetTranscriptionsFile();
+  res.json({ ok: true });
 });
 
 app.get('/api/transcriptions', (_req, res) => {
