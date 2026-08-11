@@ -1,0 +1,160 @@
+const path = require('path');
+const fs = require('fs');
+const crypto = require('crypto');
+const express = require('express');
+const session = require('express-session');
+const cookieParser = require('cookie-parser');
+const multer = require('multer');
+
+const { MemoStore } = require('./memos');
+const { ProcessingQueue } = require('./processing');
+const { createAuthMiddleware } = require('./auth');
+
+const PORT = process.env.PORT || 3000;
+const APP_PASSWORD = process.env.APP_PASSWORD || 'devpassword';
+const SESSION_SECRET = process.env.SESSION_SECRET || 'change-me-in-production';
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
+
+fs.mkdirSync(DATA_DIR, { recursive: true });
+
+const memoStore = new MemoStore(DATA_DIR);
+const processingQueue = new ProcessingQueue(memoStore);
+const { requireAuth, handleLogin, handleLogout } = createAuthMiddleware(APP_PASSWORD);
+
+const storage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    cb(null, memoStore.uploadsDir);
+  },
+  filename: (_req, file, cb) => {
+    const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+    cb(null, `${Date.now()}-${crypto.randomUUID()}-${safeName}`);
+  }
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 50 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const isWav = file.mimetype === 'audio/wav' ||
+      file.mimetype === 'audio/x-wav' ||
+      file.originalname.toLowerCase().endsWith('.wav');
+    cb(null, isWav);
+  }
+});
+
+const app = express();
+
+app.use(cookieParser());
+app.use(express.urlencoded({ extended: false }));
+app.use(express.json());
+app.use(session({
+  secret: SESSION_SECRET,
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 7 * 24 * 60 * 60 * 1000
+  }
+}));
+
+const publicDir = path.join(__dirname, '..', 'public');
+
+app.get('/health', (_req, res) => {
+  res.json({ status: 'ok' });
+});
+
+app.get('/login.html', (_req, res) => {
+  res.sendFile(path.join(publicDir, 'login.html'));
+});
+
+app.post('/login', handleLogin);
+app.post('/logout', handleLogout);
+
+app.use(requireAuth);
+app.use(express.static(publicDir));
+
+app.get('/', (_req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'public', 'app.html'));
+});
+
+app.get('/api/status', (_req, res) => {
+  const queueStatus = processingQueue.getStatus();
+  const memoPage = memoStore.getMemoPage();
+  res.json({
+    ...queueStatus,
+    pendingMemos: memoPage.totalRemaining
+  });
+});
+
+app.post('/api/upload', upload.array('files'), (req, res) => {
+  const files = req.files || [];
+
+  if (files.length === 0) {
+    return res.status(400).json({ error: 'No .wav files uploaded' });
+  }
+
+  for (const file of files) {
+    processingQueue.enqueue(file.path, file.originalname);
+  }
+
+  res.json({
+    uploaded: files.length,
+    ...processingQueue.getStatus()
+  });
+});
+
+app.get('/api/memos', (_req, res) => {
+  res.json(memoStore.getMemoPage());
+});
+
+app.patch('/api/memos/:id', (req, res) => {
+  const { transcription } = req.body;
+  const updated = memoStore.updatePendingMemoText(req.params.id, transcription ?? '');
+
+  if (!updated) {
+    return res.status(404).json({ error: 'Memo not found' });
+  }
+
+  res.json({ ok: true });
+});
+
+app.post('/api/memos/submit', (req, res) => {
+  const submissions = req.body.submissions;
+
+  if (!Array.isArray(submissions)) {
+    return res.status(400).json({ error: 'submissions array required' });
+  }
+
+  try {
+    const pageData = memoStore.submitPendingMemos(submissions);
+    res.json(pageData);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.get('/api/audio/:id', (req, res) => {
+  const memo = memoStore.getMemoById(req.params.id);
+
+  if (!memo || !fs.existsSync(memo.wavPath)) {
+    return res.status(404).json({ error: 'Audio not found' });
+  }
+
+  res.sendFile(path.resolve(memo.wavPath));
+});
+
+app.get('/api/transcriptions', (_req, res) => {
+  const filePath = memoStore.transcriptionsPath;
+
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({ error: 'No transcriptions yet' });
+  }
+
+  res.download(filePath, 'transcriptions.txt');
+});
+
+app.listen(PORT, () => {
+  console.log(`Speech-to-text web app listening on port ${PORT}`);
+  console.log(`Data directory: ${DATA_DIR}`);
+});
