@@ -231,6 +231,31 @@
     let totalRemaining = 0;
     let playingMemoId = null;
     let statusPollTimer = null;
+    let pendingMemoRefresh = false;
+    let lastMemoSnapshot = '';
+
+    function memoSnapshot(pageData) {
+      return JSON.stringify(pageData.memos || []);
+    }
+
+    function updateFooterStatus(pageData) {
+      const memos = pageData.memos || [];
+      const remaining = pageData.totalRemaining || 0;
+      if (memos.length === 0) {
+        statusText.textContent = '0 pending memos';
+        submitButton.disabled = true;
+        return;
+      }
+      statusText.textContent = `Showing ${memos.length} of ${remaining} pending memo${remaining === 1 ? '' : 's'}`;
+      submitButton.disabled = false;
+    }
+
+    function maybeRefreshAfterPlayback() {
+      if (pendingMemoRefresh) {
+        pendingMemoRefresh = false;
+        loadMemoPage({ force: true });
+      }
+    }
 
     async function apiFetch(url, options = {}) {
       const response = await fetch(url, options);
@@ -241,11 +266,16 @@
       return response;
     }
 
-    function stopPlayback() {
+    function resetAudio() {
       sharedAudio.pause();
       sharedAudio.currentTime = 0;
       playingMemoId = null;
       updatePlayButtons();
+    }
+
+    function stopPlayback() {
+      resetAudio();
+      maybeRefreshAfterPlayback();
     }
 
     function updatePlayButtons() {
@@ -278,7 +308,10 @@
       }
     }
 
-    sharedAudio.addEventListener('ended', stopPlayback);
+    sharedAudio.addEventListener('ended', () => {
+      resetAudio();
+      maybeRefreshAfterPlayback();
+    });
 
     async function persistMemoText(memoId, transcription) {
       try {
@@ -295,7 +328,7 @@
     function renderMemos(pageData) {
       currentMemos = pageData.memos || [];
       totalRemaining = pageData.totalRemaining || 0;
-      stopPlayback();
+      resetAudio();
       memoList.innerHTML = '';
 
       if (currentMemos.length === 0) {
@@ -342,10 +375,23 @@
       submitButton.disabled = false;
     }
 
-    async function loadMemoPage() {
+    async function loadMemoPage(options = {}) {
+      if (!options.force && playingMemoId && !sharedAudio.paused && !sharedAudio.ended) {
+        pendingMemoRefresh = true;
+        return;
+      }
+
       try {
         const response = await apiFetch('/api/memos');
         const pageData = await response.json();
+        const snapshot = memoSnapshot(pageData);
+
+        if (!options.force && snapshot === lastMemoSnapshot) {
+          updateFooterStatus(pageData);
+          return;
+        }
+
+        lastMemoSnapshot = snapshot;
         renderMemos(pageData);
       } catch (error) {
         console.error('Failed to load memo page:', error);

@@ -39,6 +39,8 @@ npm install
 APP_PASSWORD=devpassword SESSION_SECRET=devsecret npm start
 ```
 
+Whisper runs via `python3 -m whisper` (no need for the `whisper` CLI to be on PATH).
+
 ## Environment variables
 
 | Variable | Required | Description |

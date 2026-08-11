@@ -3,6 +3,14 @@ const path = require('path');
 const os = require('os');
 const { spawn } = require('child_process');
 
+function getWhisperCommand() {
+  const python = process.env.WHISPER_PYTHON || 'python3';
+  return {
+    command: python,
+    argsPrefix: ['-m', 'whisper']
+  };
+}
+
 class ProcessingQueue {
   constructor(memoStore) {
     this.memoStore = memoStore;
@@ -55,7 +63,7 @@ class ProcessingQueue {
     try {
       const duration = await this.getAudioDuration(filePath);
       if (duration > 60) {
-        console.log(`Skipping ${filePath} - duration exceeds 60 seconds`);
+        console.log(`Skipping ${filePath} - duration ${duration}s exceeds 60 seconds`);
         this.memoStore.deleteUploadedFile(filePath);
         return;
       }
@@ -99,14 +107,46 @@ class ProcessingQueue {
     });
   }
 
+  findTranscriptionFile(tempDir, filePath, startedAt) {
+    const baseName = path.basename(filePath, path.extname(filePath));
+    const candidates = [
+      path.join(tempDir, `${baseName}.txt`),
+      path.join(tempDir, `${path.basename(filePath)}.txt`),
+      path.join(tempDir, `${baseName}.wav.txt`)
+    ];
+
+    for (const txtFilePath of candidates) {
+      if (fs.existsSync(txtFilePath)) {
+        return txtFilePath;
+      }
+    }
+
+    try {
+      const txtFiles = fs.readdirSync(tempDir)
+        .filter((name) => name.endsWith('.txt'))
+        .map((name) => path.join(tempDir, name))
+        .filter((txtPath) => fs.statSync(txtPath).mtimeMs >= startedAt - 1000)
+        .sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
+
+      return txtFiles[0] || null;
+    } catch {
+      return null;
+    }
+  }
+
   transcribeAudio(filePath) {
     return new Promise((resolve, reject) => {
       const tempDir = os.tmpdir();
+      const startedAt = Date.now();
+      const { command, argsPrefix } = getWhisperCommand();
+      const model = process.env.WHISPER_MODEL || 'tiny';
+
       console.log(`Starting Whisper transcription for: ${filePath}`);
 
-      const whisper = spawn('whisper', [
+      const whisper = spawn(command, [
+        ...argsPrefix,
         path.resolve(filePath),
-        '--model', 'tiny',
+        '--model', model,
         '--output_format', 'txt',
         '--output_dir', tempDir,
         '--verbose', 'False',
@@ -125,47 +165,36 @@ class ProcessingQueue {
       });
 
       whisper.on('close', (code) => {
-        if (code === 0) {
-          const baseName = path.basename(filePath, path.extname(filePath));
-          const possibleFiles = [
-            path.join(tempDir, baseName + '.txt'),
-            path.join(tempDir, path.basename(filePath) + '.txt'),
-            path.join(tempDir, baseName + '.wav.txt')
-          ];
-
-          let transcription = null;
-          let foundFile = null;
-
-          for (const txtFilePath of possibleFiles) {
-            try {
-              if (fs.existsSync(txtFilePath)) {
-                transcription = fs.readFileSync(txtFilePath, 'utf8').trim();
-                foundFile = txtFilePath;
-                break;
-              }
-            } catch {
-              continue;
-            }
-          }
-
-          if (transcription && !transcription.includes('FileNotFoundError') && !transcription.includes('Skipping')) {
-            try {
-              fs.unlinkSync(foundFile);
-            } catch {
-              console.log('Could not delete temp file:', foundFile);
-            }
-            resolve(transcription);
-          } else {
-            const errorMsg = transcription || error || 'No transcription output found';
-            reject(new Error(`Transcription failed: ${errorMsg}`));
-          }
-        } else {
-          reject(new Error(`Whisper failed with code ${code}: ${error}`));
+        if (code !== 0) {
+          reject(new Error(`Whisper failed with code ${code}: ${error || output}`));
+          return;
         }
+
+        const foundFile = this.findTranscriptionFile(tempDir, filePath, startedAt);
+
+        if (!foundFile) {
+          reject(new Error(`No transcription output found. ${error || output}`));
+          return;
+        }
+
+        const transcription = fs.readFileSync(foundFile, 'utf8').trim();
+
+        if (transcription.includes('FileNotFoundError') || transcription.includes('Skipping')) {
+          reject(new Error(`Transcription failed: ${transcription}`));
+          return;
+        }
+
+        try {
+          fs.unlinkSync(foundFile);
+        } catch {
+          console.log('Could not delete temp file:', foundFile);
+        }
+
+        resolve(transcription);
       });
 
       whisper.on('error', (err) => {
-        reject(new Error(`Failed to start whisper: ${err.message}`));
+        reject(new Error(`Failed to start whisper (${command} ${argsPrefix.join(' ')}): ${err.message}`));
       });
     });
   }

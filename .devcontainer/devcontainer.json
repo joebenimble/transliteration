@@ -1,0 +1,22 @@
+{
+  "name": "Speech to Text",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:1-20-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.11"
+    }
+  },
+  "postCreateCommand": "sudo apt-get update && sudo apt-get install -y ffmpeg && pip3 install openai-whisper && npm install",
+  "forwardPorts": [3000],
+  "portsAttributes": {
+    "3000": {
+      "label": "Speech to Text",
+      "onAutoForward": "openBrowser"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": []
+    }
+  }
+}

@@ -147,7 +147,34 @@ app.get('/api/audio/:id', (req, res) => {
     return res.status(404).json({ error: 'Audio not found' });
   }
 
-  res.sendFile(path.resolve(memo.wavPath));
+  const filePath = path.resolve(memo.wavPath);
+  const stat = fs.statSync(filePath);
+  const fileSize = stat.size;
+  const range = req.headers.range;
+
+  res.setHeader('Accept-Ranges', 'bytes');
+  res.setHeader('Content-Type', 'audio/wav');
+
+  if (!range) {
+    res.setHeader('Content-Length', fileSize);
+    fs.createReadStream(filePath).pipe(res);
+    return;
+  }
+
+  const parts = range.replace(/bytes=/, '').split('-');
+  const start = parseInt(parts[0], 10);
+  const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+
+  if (start >= fileSize || end >= fileSize) {
+    res.status(416).setHeader('Content-Range', `bytes */${fileSize}`);
+    return res.end();
+  }
+
+  const chunkSize = end - start + 1;
+  res.status(206);
+  res.setHeader('Content-Range', `bytes ${start}-${end}/${fileSize}`);
+  res.setHeader('Content-Length', chunkSize);
+  fs.createReadStream(filePath, { start, end }).pipe(res);
 });
 
 app.get('/api/transcriptions', (_req, res) => {
