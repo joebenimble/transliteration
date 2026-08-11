@@ -85,7 +85,7 @@ docker run -p 3000:3000 \
 | POST | `/api/memos/submit` | Submit current page batch |
 | GET | `/api/audio/:id` | Stream source WAV |
 | DELETE | `/api/memos/:id` | Delete a pending memo without saving |
-| DELETE | `/api/transcriptions` | Clear `transcriptions.txt` |
+| POST | `/api/transcriptions/reset` | Clear `transcriptions.txt` |
 | GET | `/api/transcriptions` | Download `transcriptions.txt` |
 
 ## Data storage

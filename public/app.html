@@ -286,6 +286,19 @@
       }
     }
 
+    async function readJsonResponse(response) {
+      const text = await response.text();
+      if (!text) {
+        return {};
+      }
+
+      try {
+        return JSON.parse(text);
+      } catch {
+        throw new Error('Server returned an unexpected response. Try refreshing the page and signing in again.');
+      }
+    }
+
     async function apiFetch(url, options = {}) {
       const response = await fetch(url, options);
       if (response.status === 401) {
@@ -388,11 +401,16 @@
       resetFileButton.disabled = true;
 
       try {
-        const response = await apiFetch('/api/transcriptions', { method: 'DELETE' });
+        const response = await apiFetch('/api/transcriptions/reset', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: '{}'
+        });
+
+        const result = await readJsonResponse(response);
 
         if (!response.ok) {
-          const error = await response.json();
-          throw new Error(error.error || 'Reset failed');
+          throw new Error(result.error || 'Reset failed');
         }
 
         uploadStatus.textContent = 'transcriptions.txt has been cleared.';
@@ -434,14 +452,6 @@
         playButton.textContent = 'Play';
         playButton.dataset.memoId = memo.id;
         playButton.addEventListener('click', handlePlayClick);
-
-        const textarea = document.createElement('textarea');
-        textarea.className = 'transcription-input';
-        textarea.value = memo.transcription || '';
-        textarea.dataset.memoId = memo.id;
-        textarea.addEventListener('blur', (event) => {
-          persistMemoText(memo.id, event.target.value);
-        });
 
         audioColumn.appendChild(filename);
         audioColumn.appendChild(playButton);

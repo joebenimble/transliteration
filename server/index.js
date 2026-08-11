@@ -187,7 +187,7 @@ app.get('/api/audio/:id', (req, res) => {
   fs.createReadStream(filePath, { start, end }).pipe(res);
 });
 
-app.delete('/api/transcriptions', (_req, res) => {
+app.post('/api/transcriptions/reset', (_req, res) => {
   memoStore.resetTranscriptionsFile();
   res.json({ ok: true });
 });
