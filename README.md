@@ -1,91 +1,101 @@
-# Speech-to-Text Desktop Application
+# Speech-to-Text Web Application
 
-A Windows desktop application built with Electron that automatically monitors a folder for .wav audio files and converts them to text using OpenAI's Whisper speech recognition engine.
+A password-protected web app that transcribes uploaded `.wav` files using OpenAI Whisper. Upload multiple files, review draft transcriptions in a memo log, edit them, and submit batches to `transcriptions.txt`.
 
 ## Features
 
-- **Automatic File Monitoring**: Watches a specified folder for new .wav files
-- **Offline Speech Recognition**: Uses Whisper locally for transcription
-- **System Tray Integration**: Runs quietly in the background with tray icon
-- **File Management**: Automatically moves processed files to Recycle Bin
-- **Persistent Settings**: Remembers your folder selection between sessions
-- **Windows Notifications**: Toast notifications when transcription completes
+- Multi-file `.wav` upload (under 60 seconds each)
+- Server-side Whisper transcription (`tiny` model)
+- Memo log: review up to 10 pending transcriptions at a time
+- In-browser audio playback and editable transcriptions
+- Batch submit appends to `transcriptions.txt` and removes source WAVs
+- Simple shared-password authentication
 
 ## Prerequisites
 
-Before running the application, you need to install:
+- Node.js 20+
+- FFmpeg (`ffprobe` for duration checks)
+- Python 3 with `openai-whisper` installed (`pip install openai-whisper`)
 
-1. **Node.js** (version 16 or higher)
-2. **Whisper** - Install using pip:
-   ```bash
-   pip install openai-whisper
-   ```
-3. **FFmpeg** (for audio duration checking):
-   - Download from https://ffmpeg.org/download.html
-   - Add to your system PATH
+## Local development
 
-## Installation
-
-1. Clone or download this repository
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-
-## Usage
-
-1. Start the application:
-   ```bash
-   npm start
-   ```
-
-2. The application will appear in your system tray
-3. Right-click the tray icon and select "Configuration"
-4. Choose a folder to monitor for .wav files
-5. The application will automatically start watching the selected folder
-
-## How It Works
-
-1. Drop a .wav file into your monitored folder
-2. The application detects the new file
-3. If the audio is under 60 seconds, it gets processed by Whisper
-4. The transcription is appended to `transcriptions.txt` in the watched folder
-5. The original .wav file is moved to the Recycle Bin
-6. You receive a notification when processing is complete
-
-## File Format
-
-Transcriptions are saved in the following format in `transcriptions.txt`:
-
-```
-[filename.wav]
-Transcribed text content here...
-
-[another-file.wav]
-More transcribed content...
-```
-
-## Limitations
-
-- Only processes .wav files under 60 seconds in duration
-- Windows only
-- Requires Whisper and FFmpeg to be installed and available in PATH
-
-## Development
-
-To run in development mode:
 ```bash
-npm run dev
+npm install
+export APP_PASSWORD=your-password
+export SESSION_SECRET=some-random-secret
+npm start
 ```
 
-To build for distribution:
+Open http://localhost:3000 and sign in with `APP_PASSWORD`.
+
+### GitHub Codespaces
+
+The repo includes a devcontainer-friendly setup. In a Codespace:
+
 ```bash
-npm run build
+sudo apt-get update && sudo apt-get install -y ffmpeg python3-pip
+pip3 install openai-whisper
+npm install
+APP_PASSWORD=devpassword SESSION_SECRET=devsecret npm start
 ```
 
-## Troubleshooting
+Whisper runs via `python3 -m whisper` (no need for the `whisper` CLI to be on PATH).
 
-- **Whisper not found**: Ensure Whisper is installed and available in your PATH
-- **FFmpeg not found**: Install FFmpeg and add it to your system PATH
-- **Files not processing**: Check that files are actually .wav format and under 60 seconds
-- **No notifications**: Ensure Windows notifications are enabled for the application
+## Environment variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `APP_PASSWORD` | Yes (production) | Shared login password |
+| `SESSION_SECRET` | Yes (production) | Session signing secret |
+| `PORT` | No | HTTP port (default `3000`) |
+| `DATA_DIR` | No | Data storage path (default `./data`) |
+| `NODE_ENV` | No | Set to `production` for production deploys |
+| `COOKIE_SECURE` | No | Set to `true` when serving over HTTPS (Railway/Render). Leave unset for `http://localhost` |
+
+## Docker
+
+```bash
+docker build -t speech-to-text .
+docker run -p 3000:3000 \
+  -e APP_PASSWORD=your-password \
+  -e SESSION_SECRET=your-secret \
+  -v speech-data:/app/data \
+  speech-to-text
+```
+
+## Deploy (Railway / Render)
+
+1. Connect this repository
+2. Use the included `Dockerfile`
+3. Set `APP_PASSWORD` and `SESSION_SECRET`
+4. Attach a persistent volume at `/app/data`
+5. Health check path: `/health`
+
+## API
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/health` | Health check (no auth) |
+| POST | `/login` | Sign in |
+| POST | `/logout` | Sign out |
+| POST | `/api/upload` | Upload multiple `.wav` files |
+| GET | `/api/status` | Queue and pending memo counts |
+| GET | `/api/memos` | Current memo page |
+| PATCH | `/api/memos/:id` | Save edited transcription |
+| POST | `/api/memos/submit` | Submit current page batch |
+| GET | `/api/audio/:id` | Stream source WAV |
+| DELETE | `/api/memos/:id` | Delete a pending memo without saving |
+| POST | `/api/transcriptions/reset` | Clear `transcriptions.txt` |
+| GET | `/api/transcriptions` | Download `transcriptions.txt` |
+
+## Data storage
+
+All persistent data lives under `data/`:
+
+- `data/uploads/` — uploaded WAV files (until submitted)
+- `data/pending-memos.json` — draft transcriptions
+- `data/transcriptions.txt` — submitted transcriptions
+
+## License
+
+MIT
