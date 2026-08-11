@@ -12,8 +12,8 @@
   "author": "Your Name",
   "license": "MIT",
   "devDependencies": {
-    "electron": "^27.0.0",
-    "electron-builder": "^24.6.4"
+    "electron": "^43.3.0",
+    "electron-builder": "^26.15.3"
   },
   "dependencies": {
     "chokidar": "^3.5.3",

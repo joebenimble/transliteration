@@ -7,9 +7,11 @@ A Windows desktop application built with Electron that automatically monitors a 
 - **Automatic File Monitoring**: Watches a specified folder for new .wav files
 - **Offline Speech Recognition**: Uses Whisper locally for transcription
 - **System Tray Integration**: Runs quietly in the background with tray icon
-- **File Management**: Automatically moves processed files to Recycle Bin
+- **Memo Log Review**: Review, play, and edit transcriptions before saving
+- **Batch Submission**: Submit up to 10 reviewed memos at a time
+- **File Management**: Moves submitted files to Recycle Bin after review
 - **Persistent Settings**: Remembers your folder selection between sessions
-- **Windows Notifications**: Toast notifications when transcription completes
+- **Windows Notifications**: Toast notifications when a memo is ready for review
 
 ## Prerequisites
 
@@ -49,9 +51,12 @@ Before running the application, you need to install:
 1. Drop a .wav file into your monitored folder
 2. The application detects the new file
 3. If the audio is under 60 seconds, it gets processed by Whisper
-4. The transcription is appended to `transcriptions.txt` in the watched folder
-5. The original .wav file is moved to the Recycle Bin
-6. You receive a notification when processing is complete
+4. The draft transcription is added to the Memo Log queue
+5. Open Memo Log from the system tray to review up to 10 memos at a time
+6. Play each WAV, edit the transcription if needed, then click Submit
+7. Submitted transcriptions are appended to `transcriptions.txt` in the watched folder
+8. The original .wav files for submitted memos are moved to the Recycle Bin
+9. You receive a notification when a memo is ready for review
 
 ## File Format
 
