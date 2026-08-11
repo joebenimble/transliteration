@@ -262,9 +262,18 @@
     let statusPollTimer = null;
     let pendingMemoRefresh = false;
     let lastMemoSnapshot = '';
+    let isSubmitting = false;
 
     function memoSnapshot(pageData) {
-      return JSON.stringify(pageData.memos || []);
+      return JSON.stringify({
+        totalRemaining: pageData.totalRemaining || 0,
+        memos: pageData.memos || []
+      });
+    }
+
+    function applyMemoPage(pageData) {
+      lastMemoSnapshot = memoSnapshot(pageData);
+      renderMemos(pageData);
     }
 
     function updateFooterStatus(pageData) {
@@ -384,9 +393,8 @@
           throw new Error(error.error || 'Delete failed');
         }
 
-        const pageData = await response.json();
-        lastMemoSnapshot = '';
-        renderMemos(pageData);
+        const pageData = await readJsonResponse(response);
+        applyMemoPage(pageData);
       } catch (error) {
         console.error('Failed to delete memo:', error);
         statusText.textContent = error.message || 'Failed to delete memo';
@@ -504,7 +512,7 @@
           return;
         }
 
-        lastMemoSnapshot = snapshot;
+        lastMemoSnapshot = memoSnapshot(pageData);
         renderMemos(pageData);
       } catch (error) {
         console.error('Failed to load memo page:', error);
@@ -514,6 +522,10 @@
     }
 
     async function refreshStatus() {
+      if (isSubmitting) {
+        return;
+      }
+
       try {
         const response = await apiFetch('/api/status');
         const status = await response.json();
@@ -569,21 +581,20 @@
     }
 
     async function submitCurrentPage() {
-      if (currentMemos.length === 0) {
+      const rows = Array.from(document.querySelectorAll('textarea[data-memo-id]'));
+      if (rows.length === 0) {
         return;
       }
 
+      isSubmitting = true;
       submitButton.disabled = true;
       submitButton.textContent = 'Submitting...';
       stopPlayback();
 
-      const submissions = currentMemos.map((memo) => {
-        const textarea = document.querySelector(`textarea[data-memo-id="${memo.id}"]`);
-        return {
-          id: memo.id,
-          transcription: textarea ? textarea.value : memo.transcription
-        };
-      });
+      const submissions = rows.map((textarea) => ({
+        id: textarea.dataset.memoId,
+        transcription: textarea.value
+      }));
 
       try {
         const response = await apiFetch('/api/memos/submit', {
@@ -592,17 +603,18 @@
           body: JSON.stringify({ submissions })
         });
 
+        const pageData = await readJsonResponse(response);
+
         if (!response.ok) {
-          const error = await response.json();
-          throw new Error(error.error || 'Submit failed');
+          throw new Error(pageData.error || 'Submit failed');
         }
 
-        const pageData = await response.json();
-        renderMemos(pageData);
+        applyMemoPage(pageData);
       } catch (error) {
         console.error('Failed to submit memos:', error);
         statusText.textContent = error.message || 'Failed to submit memos';
       } finally {
+        isSubmitting = false;
         submitButton.textContent = 'Submit';
         submitButton.disabled = currentMemos.length === 0;
       }
